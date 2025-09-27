@@ -23,6 +23,35 @@ in {
     fetchgitArgs.hash = "sha256-nLBnxPbPKiLCFF2TJgD/eJKJJfzktVBW3SRW2m3WK/s=";
   };
 
+  foxglove-bridge = rosSuper.foxglove-bridge.overrideAttrs({
+    postPatch ? "", ...
+  }: {
+    postPatch = let
+      # SDK version from CMakeLists.txt. If the version doesn't match,
+      # cmake fails with "Hash mismatch" and we can fix it here.
+      FOXGLOVE_SDK_VERSION = "0.14.2";
+      systemToPlatform = {
+        "x86_64-linux" = "x86_64-unknown-linux-gnu";
+        "aarch64-linux" = "aarch64-unknown-linux-gnu";
+      };
+      systemToHash = {
+        "x86_64-linux" = "sha256-V0w84AbWEx1lGbQW8l7zfFsqByHvSciUKGx5paXgtPw=";
+        "aarch64-linux" = "sha256-9U4+CJJqiIKpvIAxz7JKBAviY48e9OhyNvo63tGrKiM=";
+      };
+      FOXGLOVE_SDK_PLATFORM = systemToPlatform.${self.system};
+      sdk = self.fetchurl {
+        url = "https://github.com/foxglove/foxglove-sdk/releases/download/sdk%2Fv${FOXGLOVE_SDK_VERSION}/foxglove-v${FOXGLOVE_SDK_VERSION}-cpp-${FOXGLOVE_SDK_PLATFORM}.zip";
+        hash = systemToHash.${self.system};
+      };
+    in
+      # Does their CMakeLists.txt support cross compilation?
+      postPatch + ''
+        substituteInPlace CMakeLists.txt --replace-fail \
+          'https://github.com/foxglove/foxglove-sdk/releases/download/sdk%2Fv''${FOXGLOVE_SDK_VERSION}/foxglove-v''${FOXGLOVE_SDK_VERSION}-cpp-''${FOXGLOVE_SDK_PLATFORM}.zip' \
+          ${sdk}
+      '';
+  });
+
   gazebo = self.gazebo_11;
 
   geometric-shapes = rosSuper.geometric-shapes.overrideAttrs({
@@ -174,20 +203,6 @@ in {
     revVariable = "nlohmann_json_schema_validator_version";
     fetchgitArgs.hash = "sha256-b02OFUx0BxUA6HN6IaacSg1t3RP4o7NND7X0U635W8U=";
   };
-
-  rcutils = rosSuper.rcutils.overrideAttrs ({
-    patches ? [], ...
-  }: {
-    patches = [ # override the patch from ros2-overlay.nix!
-      # Fix linking to libatomic
-      # https://github.com/ros2/rcutils/pull/384
-      (self.fetchpatch {
-        # Version #384 rebased to rolling
-        url = "https://github.com/ros2/rcutils/commit/acdcf805dfd8d3cf77f269ef280077d4226e6e4e.patch";
-        hash = "sha256-RWEgleC72d8qZKeLGQ2XKx6js83MgTvcb1PJ28shrsk=";
-      })
-    ];
-  });
 
   rviz-ogre-vendor = lib.patchAmentVendorGit rosSuper.rviz-ogre-vendor {
     tarSourceArgs.hook = let
